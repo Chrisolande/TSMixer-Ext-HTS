@@ -1,0 +1,67 @@
+# Version control
+.git
+.gitignore
+
+# Python cruft
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Training-only artifacts, not needed by the serving image
+data/m5/
+data/raw/
+*.db
+*.sqlite
+*.sqlite3
+notebooks/
+*.ipynb
+*.ipynb_checkpoints/
+wandb/
+mlruns/
+optuna_journal*
+m5_optuna.db
+
+# Tests (not needed inside the runtime image)
+tests/
+
+# Spec-kit / agent / worktree artifacts
+specs/
+.specify/
+.agents/
+.serena/
+.worktrees/
+__marimo__/
+
+# Docs / non-runtime project files
+*.qmd
+*.md
+docs/
+README*
+
+# Local env / secrets — never send these to the build context
+.env
+.env.*
+*.pem
+*.key
+
+# Editor/OS cruft
+.vscode/
+.idea/
+.DS_Store
+
+# Docker itself
+Dockerfile*
+docker-compose*.yml
+.dockerignore
