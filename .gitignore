@@ -1,0 +1,21 @@
+.worktrees/
+.venv/
+__pycache__/
+*.pth
+.idea/
+*.egg-info/
+
+# Private / experimental — never commit these
+__marimo__/
+data/m5_mock/
+docs/
+tests/
+tsmixer_m5_lib/
+*.ipynb
+main.py
+kaggle_*.py
+.env
+
+# build artifacts
+.dist/
+dist/
