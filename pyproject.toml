@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["tsmixer_m5*"]
+
+[project]
+name = "subhierts"
+version = "0.1.0"
+requires-python = ">=3.13"
+
+dependencies = [
+    "fastapi>=0.110.0",
+    "ipykernel>=7.3.0",
+    "loguru>=0.7.3",
+    "numpy>=1.26.0",
+    "pandas>=3.0.5",
+    "pydantic-settings>=2.0.0",
+    "scalar-fastapi>=1.0.0",
+    "scikit-learn>=1.9.0",
+    "scipy>=1.13.0",
+    "torch>=2.3.0",
+    "tqdm>=4.66.0",
+    "uvicorn>=0.28.0",
+    "wandb-workspaces>=0.4.5",
+]
+
+[project.optional-dependencies]
+train = [
+    "httpx>=0.27.0",
+    "pandas>=3.0.5",
+    "scikit-learn>=1.9.0",
+    "scipy>=1.13.0",
+    "wandb>=0.17.0",
+]
+
+dev = [
+    "graphviz>=0.21",
+    "ipykernel>=7.3.0",
+    "marimo>=0.23.16",
+    "optuna>=3.6.0",
+    "optuna-integration[wandb]>=4.0.0",
+    "pytest>=8.0.0",
+    "ruff>=0.3.0",
+    "torchview>=0.2.7",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["E501", "B008", "B905"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
