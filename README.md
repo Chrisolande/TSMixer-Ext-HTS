@@ -1,19 +1,20 @@
-# ⚡ TSMixer M5: Hierarchical & Probabilistic Time Series Forecasting
+#  TSMixer M5: Hierarchical & Probabilistic Time Series Forecasting
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Inference%20Service-009688.svg)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Docker-Multi--stage%20Slim-2496ED.svg)](https://www.docker.com/)
 [![W&B Tracked](https://img.shields.io/badge/Weights_%26_Biases-Tracked-yellow.svg)](https://wandb.ai/olandechris-/tsmixer-m5/reports/M5-Forecasting:-TSMixer-Hyperparameter-Optimization-&-Final-Results--VmlldzoxNzY4OTIxOA==)
 [![Optuna](https://img.shields.io/badge/Optuna-HPO%20Enabled-blue)](https://optuna.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An end-to-end, production-grade implementation of **TSMixerExt** (Extended Time-Series Mixer) adapted for the **30,490-series M5 Hierarchical Forecasting Dataset**. This repository combines probabilistic count modeling (Negative Binomial likelihood), sub-100ms sparse matrix hierarchy aggregation across 42,840 nodes, automated parallel Optuna hyperparameter optimization (HPO), native Weights & Biases experiment tracking, and a **production FastAPI inference service** for real-time probabilistic forecasting.
+An end-to-end, production-grade implementation of **TSMixerExt** (Extended Time-Series Mixer) adapted for the **30,490-series M5 Hierarchical Forecasting Dataset**. This repository combines probabilistic count modeling (Negative Binomial likelihood), sub-100ms sparse matrix hierarchy aggregation across 42,840 nodes, automated parallel Optuna hyperparameter optimization (HPO), native Weights & Biases experiment tracking, and a **production FastAPI inference service** with Docker containerization for real-time probabilistic forecasting.
 
 Based on the paper: [TSMixer: Lightweight MLP-Architecture for Time Series Forecasting](https://arxiv.org/abs/2303.06053) (Chen et al., 2023).
 
 ---
 
-## 🎯 Project Overview & Empirical Results
+##  Project Overview & Empirical Results
 
 The M5 Forecasting competition requires predicting daily unit sales across 30,490 bottom-level series organized into a 12-level hierarchy totaling 42,840 time series nodes.
 
@@ -22,11 +23,12 @@ The M5 Forecasting competition requires predicting daily unit sales across 30,49
 - **Multi-Seed Stability**: Evaluated over 3 independent random seeds (`42, 43, 44`) with low variance.
 - **Fast Aggregation**: SciPy sparse matrix hierarchy construction executes in **<100ms** without costly pandas DataFrame melting operations.
 - **GPU-Accelerated Evaluation**: PyTorch GPU sparse matrix multiplication (`torch.sparse.mm`) enables high-throughput validation across all 42,840 nodes.
-- **Real-Time Inference API**: FastAPI service delivers 28-day probabilistic forecasts (μ, α, p10/p50/p90) from real M5 sales history in a single HTTP request.
+- **Real-Time Inference API**: FastAPI service delivers 28-day probabilistic forecasts ($\mu, \alpha$, p10/p50/p90) from real M5 sales history in a single HTTP request.
+- **Production Containerization**: Multi-stage slim Docker image built using `uv` with zero dev bloat and standard library health check probe.
 
 ---
 
-## 🏗️ Core Architectural Features
+## ️ Core Architectural Features
 
 ```
                           ┌──────────────────────────┐
@@ -78,7 +80,7 @@ The M5 Forecasting competition requires predicting daily unit sales across 30,49
 
 ---
 
-## 📐 Mathematical Formulations
+##  Mathematical Formulations
 
 ### 1. Reversible Instance Normalization ($\text{RevIN}$)
 To prevent distribution shift across sliding historical windows:
@@ -107,10 +109,10 @@ and $w_i$ represents the dollar-revenue weight assigned to node $i$ across all 1
 
 ---
 
-## 📂 Project Structure
+##  Project Structure
 
 ```
-SubHierTS/
+TSMixer-Ext-HTS/
 ├── tsmixer_m5/
 │   ├── __init__.py               # Package exports (M5Dataset, preprocess_m5, TSMixerExt, etc.)
 │   ├── data.py                   # Data pipeline: raw CSV validation, feature engineering, S-matrix & PyTorch Dataset
@@ -119,6 +121,7 @@ SubHierTS/
 │   ├── metrics.py                # Rolling window evaluation helper (evaluate_wrmsse)
 │   ├── hparam_search.py          # Multi-GPU Optuna study with TPE Sampler & MedianPruner
 │   ├── training.py               # 3-seed final training loop with W&B logging & model checkpoint artifacts
+│   ├── utils.py                  # PyTorch model utilities & reproducibility helpers
 │   └── api/                      # ── FastAPI Inference Service ──
 │       ├── app.py                # Application factory, lifespan, CORS & middleware
 │       ├── config.py             # Pydantic Settings (env vars, device, artifact paths)
@@ -129,22 +132,24 @@ SubHierTS/
 │       │   ├── request.py        # ForecastRequest & SeriesKey Pydantic models
 │       │   └── response.py       # ForecastResponse, ItemForecastResult & ErrorDetail models
 │       └── v1/
-│           ├── forecast.py       # POST /v1/forecast — batch probabilistic inference endpoint
+│           ├── forecast.py       # POST /v1/forecast - batch probabilistic inference endpoint
 │           └── health.py         # GET /healthz (liveness) & GET /readyz (readiness) probes
 ├── tests/
 │   ├── test_api_store.py         # Unit tests: category encoding & window assembly
 │   └── test_fastapi_forecast_route.py  # Integration tests: TestClient endpoint coverage
 ├── data/
 │   ├── m5/                       # Full M5 dataset (calendar.csv, sell_prices.csv, sales_train.csv)
-│   └── m5_sample/                # 5-item sample subset for default API testing
-├── specs/                        # Spec-driven development artifacts (spec.md, plan.md, tasks.md)
-├── pyproject.toml                # Project dependencies and Ruff/pytest configuration
+│   └── m5_sample/                # Sample subset for default API testing
+├── Dockerfile                    # Multi-stage slim container image
+├── healthcheck.py                # Lightweight standard-library container health probe
+├── pyproject.toml                # Project dependencies and tool configuration
+├── uv.lock                       # Lockfile for reproducible builds
 └── README.md
 ```
 
 ---
 
-## 🚀 Getting Started & Setup
+##  Getting Started & Setup
 
 ### 1. Prerequisites & Installation
 
@@ -172,7 +177,7 @@ data/
 │   ├── sell_prices.csv
 │   └── sales_train_evaluation.csv    # or sales_train_validation.csv
 └── m5_sample/
-    └── sales_train_evaluation.csv    # 5-item subset — used by API default data
+    └── sales_train_evaluation.csv    # 5-item subset - used by API default data
 ```
 
 > The `data/m5_sample/` subset is used automatically by the inference API when `past_sales` is omitted from a request. It contains real M5 evaluation rows for `HOBBIES_1_000` through `HOBBIES_1_004` at store `CA_1`.
@@ -192,7 +197,7 @@ export DEVICE="cpu"
 
 ---
 
-## 💡 Usage & Workflows
+##  Usage & Workflows
 
 ### 1. Parallel Hyperparameter Optimization (Optuna HPO)
 
@@ -243,7 +248,7 @@ print(f"Final Evaluation WRMSSE: {mean_score:.4f} ± {std_score:.4f}")
 
 ### 3. FastAPI Inference Service
 
-#### Start the server
+#### Local Development Server
 
 ```bash
 uvicorn tsmixer_m5.api.app:app --host 0.0.0.0 --port 8000 --reload
@@ -255,12 +260,28 @@ On startup the service will:
 3. Infer `hidden_size`, `cat_cardinalities`, and `cat_emb_dims` directly from the checkpoint state-dict.
 4. Load the M5 sample snapshot from `./data/m5_sample/` for history-free requests.
 
+#### Docker Container Deployment
+
+Build and run the multi-stage slim container image:
+
+```bash
+# Build image with uv
+docker build -t tsmixer-inference:latest .
+
+# Run containerized service
+docker run -d \
+  -p 8000:8000 \
+  -e WANDB_API_KEY="your_wandb_api_key_here" \
+  --name tsmixer-service \
+  tsmixer-inference:latest
+```
+
 #### API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/healthz` | Liveness probe — returns `{"status":"ok"}` |
-| `GET` | `/readyz` | Readiness probe — confirms model is loaded |
+| `GET` | `/healthz` | Liveness probe - returns `{"status":"healthy"}` |
+| `GET` | `/readyz` | Readiness probe - confirms model is loaded |
 | `POST` | `/v1/forecast` | Batch 28-day probabilistic forecast |
 | `GET` | `/scalar` | Modern Scalar interactive API docs |
 | `GET` | `/docs` | Classic Swagger UI |
@@ -268,7 +289,7 @@ On startup the service will:
 #### Forecast via curl
 
 ```bash
-# Single item — uses on-disk snapshot automatically (no past_sales needed)
+# Single item - uses on-disk snapshot automatically (no past_sales needed)
 curl -s -X POST http://localhost:8000/v1/forecast \
   -H "Content-Type: application/json" \
   -d '{
@@ -327,24 +348,7 @@ curl -s -X POST http://localhost:8000/v1/forecast \
 }
 ```
 
-> **Note on p10 zeros**: For low-demand items (~1–2 units/day), `P(sales=0)` can exceed 10%, making the 10th percentile mathematically zero. This is correct Negative Binomial behaviour, not a bug.
-
-#### Forecast via Python
-
-```python
-import httpx
-
-response = httpx.post(
-    "http://localhost:8000/v1/forecast",
-    json={
-        "as_of_date": "2016-04-25",
-        "items": [{"store_id": "CA_1", "item_id": "HOBBIES_1_001"}],
-        "return_quantiles": True,
-    },
-)
-result = response.json()
-print(result["results"][0]["mean"])  # 28-day mean forecast
-```
+> **Note on p10 zeros**: For low-demand items (~1-2 units/day), `P(sales=0)` can exceed 10%, making the 10th percentile mathematically zero. This is correct Negative Binomial behaviour, not a bug.
 
 #### Running Tests
 
@@ -385,21 +389,21 @@ Request (POST /v1/forecast)
 ```
 
 **Observability headers** are automatically injected on every response:
-- `X-Request-ID` — UUID trace identifier (pass your own via request header)
-- `X-Response-Time-MS` — wall-clock latency in milliseconds
+- `X-Request-ID` - UUID trace identifier (pass your own via request header)
+- `X-Response-Time-MS` - wall-clock latency in milliseconds
 
 ---
 
-## 📊 Weights & Biases Integration
+##  Weights & Biases Integration
 
 - **Live Interactive W&B Report**: Explore training curves, Optuna parameter importance, and evaluation dashboards on [Weights & Biases Reports](https://wandb.ai/olandechris-/tsmixer-m5/reports/M5-Forecasting:-TSMixer-Hyperparameter-Optimization-&-Final-Results--VmlldzoxNzY4OTIxOA==).
 - **Automated Metric Tracking**: Real-time logging of train NLL, validation NLL, learning rate schedules, and step-based WRMSSE.
-- **Model Registry & Artifacts**: Best performing checkpoints (`best_wrmsse_model_seed_{seed}.pth`) are automatically uploaded to W&B Model Catalog using `run.log_model()`.
-- **API Auto-Download**: The FastAPI service pulls the registered artifact at startup via `wandb.Api().artifact(...)` — no manual checkpoint management required.
+- **Model Registry & Artifacts**: Best performing checkpoints (`best_wrmsse_seed_{seed}.pth`) are automatically uploaded to W&B Model Catalog using `run.log_model()`.
+- **API Auto-Download**: The FastAPI service pulls the registered artifact at startup via `wandb.Api().artifact(...)` - no manual checkpoint management required.
 
 ---
 
-## 📜 Citation & References
+##  Citation & References
 
 ```bibtex
 @article{chen2023tsmixer,
@@ -412,6 +416,6 @@ Request (POST /v1/forecast)
 
 ---
 
-## 📄 License
+##  License
 
 Distributed under the MIT License. See `LICENSE` for details.

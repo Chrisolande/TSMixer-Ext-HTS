@@ -265,7 +265,7 @@ def train_and_validate(
             run.summary["epochs_trained"] = epoch
             run.summary["early_stopped"] = epochs_no_improve >= PATIENCE
 
-            # 3. Native Model Logging — logs checkpoint & registers in W&B model catalog
+            # 3. Native Model Logging - logs checkpoint & registers in W&B model catalog
             if best_wrmsse_state is not None:
                 run.log_model(path=best_wrmsse_path, name=f"tsmixer_m5_seed_{seed}", aliases=["best", f"seed_{seed}"])
 

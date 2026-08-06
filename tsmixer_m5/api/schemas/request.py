@@ -22,7 +22,7 @@ class ForecastRequest(BaseModel):
         "json_schema_extra": {
             "examples": [
                 {
-                    "summary": "Default – use on-disk snapshot (recommended)",
+                    "summary": "Default - use on-disk snapshot (recommended)",
                     "value": {
                         "as_of_date": "2016-04-25",
                         "items": [{"store_id": "CA_1", "item_id": "HOBBIES_1_001"}],
@@ -30,7 +30,7 @@ class ForecastRequest(BaseModel):
                     },
                 },
                 {
-                    "summary": "Manual override – supply your own 35-day window",
+                    "summary": "Manual override - supply your own 35-day window",
                     "value": {
                         "as_of_date": "2016-04-25",
                         "items": [
