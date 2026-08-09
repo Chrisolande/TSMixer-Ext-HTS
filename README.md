@@ -4,7 +4,7 @@
 [![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Inference%20Service-009688.svg)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/Docker-Multi--stage%20Slim-2496ED.svg)](https://www.docker.com/)
-[![W&B Tracked](https://img.shields.io/badge/Weights_%26_Biases-Tracked-yellow.svg)](https://wandb.ai/olandechris-/tsmixer-m5/reports/TSMixer-M5-Test-WRMSSE-Optimization-Report--VmlldzoxNzY5MzQ3NA)
+[![W&B Tracked](https://img.shields.io/badge/Weights_%26_Biases-Tracked-yellow.svg)](https://wandb.ai/olandechris-/tsmixer-m5/reports/TSMixer-M5-Test-WRMSSE-Optimization-Report--VmlldzoxNzY5MzQ3NA?accessToken=n6bpmf6yiadweiscxlo7ggks6p47i209dp6l1h59bmqr2gqxl2qdxufj9arh4uhw)
 [![Optuna](https://img.shields.io/badge/Optuna-HPO%20Enabled-blue)](https://optuna.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
