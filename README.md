@@ -8,9 +8,7 @@
 [![Optuna](https://img.shields.io/badge/Optuna-HPO%20Enabled-blue)](https://optuna.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An end-to-end, production-grade implementation of **TSMixerExt** (Extended Time-Series Mixer) adapted for the **30,490-series M5 Hierarchical Forecasting Dataset**. This repository combines probabilistic count modeling (Negative Binomial likelihood), sub-100ms sparse matrix hierarchy aggregation across 42,840 nodes, automated parallel Optuna hyperparameter optimization (HPO), native Weights & Biases experiment tracking, and a **production FastAPI inference service** with Docker containerization for real-time probabilistic forecasting.
-
-Based on the paper: [TSMixer: Lightweight MLP-Architecture for Time Series Forecasting](https://arxiv.org/abs/2303.06053) (Chen et al., 2023).
+An end-to-end implementation of **TSMixerExt** (Extended Time-Series Mixer) adapted for the **30,490-series M5 Hierarchical Forecasting Dataset**. This repository combines probabilistic count modeling (Negative Binomial likelihood), sub-100ms sparse matrix hierarchy aggregation across 42,840 nodes, automated parallel Optuna hyperparameter optimization (HPO), native Weights & Biases experiment tracking, and a **FastAPI inference service** with Docker containerization for real-time probabilistic forecasting.
 
 ---
 
@@ -24,7 +22,7 @@ The M5 Forecasting competition requires predicting daily unit sales across 30,49
 - **Fast Aggregation**: SciPy sparse matrix hierarchy construction executes in **<100ms** without costly pandas DataFrame melting operations.
 - **GPU-Accelerated Evaluation**: PyTorch GPU sparse matrix multiplication (`torch.sparse.mm`) enables high-throughput validation across all 42,840 nodes.
 - **Real-Time Inference API**: FastAPI service delivers 28-day probabilistic forecasts ($\mu, \alpha$, p10/p50/p90) from real M5 sales history in a single HTTP request.
-- **Production Containerization**: Multi-stage slim Docker image built using `uv` with zero dev bloat and standard library health check probe.
+- **Containerization**: Multi-stage slim Docker image built using `uv` with zero dev bloat and standard library health check probe.
 
 ---
 
@@ -64,6 +62,7 @@ The M5 Forecasting competition requires predicting daily unit sales across 30,49
                                        │ Continuous Negative      │
                                        │ Binomial Log-Likelihood  │
                                        └──────────────────────────┘
+                                       └────────────┬─────────────┘
 ```
 
 1. **Probabilistic Negative Binomial Loss ($\mu, \alpha$)**:
@@ -114,36 +113,33 @@ and $w_i$ represents the dollar-revenue weight assigned to node $i$ across all 1
 ```
 TSMixer-Ext-HTS/
 ├── tsmixer_m5/
-│   ├── __init__.py               # Package exports (M5Dataset, preprocess_m5, TSMixerExt, etc.)
-│   ├── data.py                   # Data pipeline: raw CSV validation, feature engineering, S-matrix & PyTorch Dataset
-│   ├── modeling.py               # TSMixerExt model architecture, RevIN, ConditionalMixerLayer & NegativeBinomialLoss
-│   ├── wrmsse.py                 # M5WRMSSEMetric (GPU/CPU) & compute_m5_scaling_factors
-│   ├── metrics.py                # Rolling window evaluation helper (evaluate_wrmsse)
-│   ├── hparam_search.py          # Multi-GPU Optuna study with TPE Sampler & MedianPruner
-│   ├── training.py               # 3-seed final training loop with W&B logging & model checkpoint artifacts
-│   ├── utils.py                  # PyTorch model utilities & reproducibility helpers
-│   └── api/                      # ── FastAPI Inference Service ──
-│       ├── app.py                # Application factory, lifespan, CORS & middleware
-│       ├── config.py             # Pydantic Settings (env vars, device, artifact paths)
-│       ├── runner.py             # ModelRunner: W&B artifact download, AMP inference, quantile computation
-│       ├── store.py              # InferenceStore: category encoding & 35-day sales window assembly
-│       ├── dependencies.py       # FastAPI dependency injection (get_model_runner, get_inference_store)
+│   ├── __init__.py
+│   ├── data.py
+│   ├── modeling.py
+│   ├── wrmsse.py
+│   ├── metrics.py
+│   ├── hparam_search.py
+│   ├── training.py
+│   ├── utils.py
+│   └── api/
+│       ├── app.py
+│       ├── config.py
+│       ├── runner.py
+│       ├── store.py
+│       ├── dependencies.py
 │       ├── schemas/
-│       │   ├── request.py        # ForecastRequest & SeriesKey Pydantic models
-│       │   └── response.py       # ForecastResponse, ItemForecastResult & ErrorDetail models
+│       │   ├── request.py
+│       │   └── response.py
 │       └── v1/
-│           ├── forecast.py       # POST /v1/forecast - batch probabilistic inference endpoint
-│           └── health.py         # GET /healthz (liveness) & GET /readyz (readiness) probes
-├── tests/
-│   ├── test_api_store.py         # Unit tests: category encoding & window assembly
-│   └── test_fastapi_forecast_route.py  # Integration tests: TestClient endpoint coverage
+│           ├── forecast.py
+│           └── health.py
 ├── data/
-│   ├── m5/                       # Full M5 dataset (calendar.csv, sell_prices.csv, sales_train.csv)
-│   └── m5_sample/                # Sample subset for default API testing
-├── Dockerfile                    # Multi-stage slim container image
-├── healthcheck.py                # Lightweight standard-library container health probe
-├── pyproject.toml                # Project dependencies and tool configuration
-├── uv.lock                       # Lockfile for reproducible builds
+│   ├── m5/
+│   └── m5_sample/
+├── Dockerfile
+├── healthcheck.py
+├── pyproject.toml
+├── uv.lock
 └── README.md
 ```
 
@@ -400,19 +396,6 @@ Request (POST /v1/forecast)
 - **Automated Metric Tracking**: Real-time logging of train NLL, validation NLL, learning rate schedules, and step-based WRMSSE.
 - **Model Registry & Artifacts**: Best performing checkpoints (`best_wrmsse_seed_{seed}.pth`) are automatically uploaded to W&B Model Catalog using `run.log_model()`.
 - **API Auto-Download**: The FastAPI service pulls the registered artifact at startup via `wandb.Api().artifact(...)` - no manual checkpoint management required.
-
----
-
-##  Citation & References
-
-```bibtex
-@article{chen2023tsmixer,
-  title={TSMixer: Lightweight MLP-Architecture for Time Series Forecasting},
-  author={Chen, Si-An and Li, Chun-Liang and Yoder, Nate and Arik, Sercan O and Pfister, Tomas},
-  journal={arXiv preprint arXiv:2303.06053},
-  year={2023}
-}
-```
 
 ---
 
