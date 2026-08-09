@@ -262,14 +262,14 @@ Build and run the multi-stage slim container image:
 
 ```bash
 # Build image with uv
-docker build -t tsmixer-inference:latest .
+docker build -t tsmixer-ext-hts:latest .
 
 # Run containerized service
 docker run -d \
   -p 8000:8000 \
   -e WANDB_API_KEY="your_wandb_api_key_here" \
-  --name tsmixer-service \
-  tsmixer-inference:latest
+  --name tsmixer-ext-hts \
+  tsmixer-ext-hts:latest
 ```
 
 #### API Endpoints
