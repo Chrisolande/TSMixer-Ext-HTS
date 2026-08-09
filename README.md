@@ -4,7 +4,7 @@
 [![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Inference%20Service-009688.svg)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/Docker-Multi--stage%20Slim-2496ED.svg)](https://www.docker.com/)
-[![W&B Tracked](https://img.shields.io/badge/Weights_%26_Biases-Tracked-yellow.svg)](https://wandb.ai/olandechris-/tsmixer-m5/reports/M5-Forecasting:-TSMixer-Hyperparameter-Optimization-&-Final-Results--VmlldzoxNzY4OTIxOA==)
+[![W&B Tracked](https://img.shields.io/badge/Weights_%26_Biases-Tracked-yellow.svg)](https://wandb.ai/olandechris-/tsmixer-m5/reports/TSMixer-M5-Test-WRMSSE-Optimization-Report--VmlldzoxNzY5MzQ3NA)
 [![Optuna](https://img.shields.io/badge/Optuna-HPO%20Enabled-blue)](https://optuna.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -392,7 +392,7 @@ Request (POST /v1/forecast)
 
 ##  Weights & Biases Integration
 
-- **Live Interactive W&B Report**: Explore training curves, Optuna parameter importance, and evaluation dashboards on [Weights & Biases Reports](https://wandb.ai/olandechris-/tsmixer-m5/reports/M5-Forecasting:-TSMixer-Hyperparameter-Optimization-&-Final-Results--VmlldzoxNzY4OTIxOA==).
+- **Live Interactive W&B Report**: Explore training curves, Optuna parameter importance, and evaluation dashboards on [Weights & Biases Reports](https://wandb.ai/olandechris-/tsmixer-m5/reports/TSMixer-M5-Test-WRMSSE-Optimization-Report--VmlldzoxNzY5MzQ3NA).
 - **Automated Metric Tracking**: Real-time logging of train NLL, validation NLL, learning rate schedules, and step-based WRMSSE.
 - **Model Registry & Artifacts**: Best performing checkpoints (`best_wrmsse_seed_{seed}.pth`) are automatically uploaded to W&B Model Catalog using `run.log_model()`.
 - **API Auto-Download**: The FastAPI service pulls the registered artifact at startup via `wandb.Api().artifact(...)` - no manual checkpoint management required.
