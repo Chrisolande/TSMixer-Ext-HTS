@@ -38,6 +38,44 @@ The dataset covers 30,490 individual product-store combinations, organized into 
 
 <br>
 
+### Model computational graph & conditioning
+
+```text
+                          ┌──────────────────────────┐
+                          │    Static Metadata       │
+                          │ (Categorical + Cont.)    │
+                          └────────────┬─────────────┘
+                                       │ Static Embeddings
+                                       ▼
+┌──────────────────┐           ┌──────────────┐
+│  Past Sales &    │ ────────► │  Temporal    │ ────┐
+│ Historical Exog  │ (L steps) │ Projection   │     │
+└──────────────────┘           └──────────────┘     │
+                                                    ▼
+                                       ┌──────────────────────────┐
+                                       │ Conditional Feature      │ ◄── Static Vector (v_static)
+                                       │ Mixing (Past & Future)   │
+                                       └────────────┬─────────────┘
+                                                    │
+┌──────────────────┐                                ▼
+│ Future Exogenous │ (T steps) ──────► ┌──────────────────────────┐
+│ Covariates       │                   │ Stacked Conditional      │ ◄── Static Vector (v_static)
+└──────────────────┘                   │ Mixer Layers (1..N)      │
+                                       └────────────┬─────────────┘
+                                                    │
+                                                    ▼
+                                       ┌──────────────────────────┐
+                                       │   Probabilistic Head     │
+                                       │ (Softplus μ, Softplus α) │
+                                       └────────────┬─────────────┘
+                                                    │
+                                                    ▼
+                                       ┌──────────────────────────┐
+                                       │ Continuous Negative      │
+                                       │ Binomial Log-Likelihood  │
+                                       └──────────────────────────┘
+```
+
 ### 1. Reversible Instance Normalization (RevIN)
 
 To keep the model stable across sliding historical windows with different scales:
