@@ -8,8 +8,6 @@ __pycache__/
 # Private / experimental — never commit these
 __marimo__/
 data/m5_mock/
-docs/
-tests/
 tsmixer_m5_lib/
 *.ipynb
 main.py
@@ -19,3 +17,10 @@ kaggle_*.py
 # build artifacts
 .dist/
 dist/
+
+# Quarto docs build output (keep docs/*.qmd source)
+docs/_site/
+docs/.quarto/
+**/*.quarto_ipynb
+
+/.quarto/

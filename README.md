@@ -1,4 +1,4 @@
-#  TSMixer M5: Hierarchical & Probabilistic Time Series Forecasting
+# Hierarchical & Probabilistic Time Series Forecasting
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.0+](https://img.shields.io/badge/pytorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
@@ -8,163 +8,159 @@
 [![Optuna](https://img.shields.io/badge/Optuna-HPO%20Enabled-blue)](https://optuna.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An end-to-end implementation of **TSMixerExt** (Extended Time-Series Mixer) adapted for the **30,490-series M5 Hierarchical Forecasting Dataset**. This repository combines probabilistic count modeling (Negative Binomial likelihood), sub-100ms sparse matrix hierarchy aggregation across 42,840 nodes, automated parallel Optuna hyperparameter optimization (HPO), native Weights & Biases experiment tracking, and a **FastAPI inference service** with Docker containerization for real-time probabilistic forecasting.
+## What this does
+
+Walmart sells thousands of products across many stores. This system predicts how many units of each product will sell on each of the next 28 days, and it gives a range of likely outcomes instead of a single guess.
+
+Two things make that harder than it sounds. First, most products barely sell at all on most days: a lot of the data is zeros, with the occasional spike. Second, individual product forecasts need to add up correctly at the store level, the category level, and the company level. A forecast that looks fine for one item but breaks the totals when you roll it up isn't actually useful.
+
+This project handles both problems, then wraps the trained model in a live web service so another piece of software can ask "how many of this item will sell next week?" and get an answer back immediately.
 
 ---
 
-##  Project Overview & Empirical Results
+## How it works
 
-The M5 Forecasting competition requires predicting daily unit sales across 30,490 bottom-level series organized into a 12-level hierarchy totaling 42,840 time series nodes.
+The dataset covers 30,490 individual product-store combinations, organized into a hierarchy that totals 42,840 series once you include every store, category, and company-wide rollup. A few design choices make the forecasts useful in practice rather than just accurate on paper:
 
-### Key Empirical Results:
-- **WRMSSE Metric**: Achieves a **0.575 WRMSSE** averaged across all 12 hierarchy levels on the M5 evaluation set.
-- **Multi-Seed Stability**: Evaluated over 3 independent random seeds (`42, 43, 44`) with low variance.
-- **Fast Aggregation**: SciPy sparse matrix hierarchy construction executes in **<100ms** without costly pandas DataFrame melting operations.
-- **GPU-Accelerated Evaluation**: PyTorch GPU sparse matrix multiplication (`torch.sparse.mm`) enables high-throughput validation across all 42,840 nodes.
-- **Real-Time Inference API**: FastAPI service delivers 28-day probabilistic forecasts ($\mu, \alpha$, p10/p50/p90) from real M5 sales history in a single HTTP request.
-- **Containerization**: Multi-stage slim Docker image built using `uv` with zero dev bloat and standard library health check probe.
-
----
-
-## ️ Core Architectural Features
-
-```
-                          ┌──────────────────────────┐
-                          │    Static Metadata       │
-                          │ (Categorical + Cont.)    │
-                          └────────────┬─────────────┘
-                                       │ Static Embeddings
-                                       ▼
-┌──────────────────┐           ┌──────────────┐
-│  Past Sales &    │ ────────► │  Temporal    │ ────┐
-│ Historical Exog  │ (L steps) │ Projection   │     │
-└──────────────────┘           └──────────────┘     │
-                                                    ▼
-                                       ┌──────────────────────────┐
-                                       │ Conditional Feature      │ ◄── Static Vector (v_static)
-                                       │ Mixing (Past & Future)   │
-                                       └────────────┬─────────────┘
-                                                    │
-┌──────────────────┐                                ▼
-│ Future Exogenous │ (T steps) ──────► ┌──────────────────────────┐
-│ Covariates       │                   │ Stacked Conditional      │ ◄── Static Vector (v_static)
-└──────────────────┘                   │ Mixer Layers (1..N)      │
-                                       └────────────┬─────────────┘
-                                                    │
-                                                    ▼
-                                       ┌──────────────────────────┐
-                                       │   Probabilistic Head     │
-                                       │ (Softplus μ, Softplus α) │
-                                       └────────────┬─────────────┘
-                                                    │
-                                                    ▼
-                                       ┌──────────────────────────┐
-                                       │ Continuous Negative      │
-                                       │ Binomial Log-Likelihood  │
-                                       └──────────────────────────┘
-                                       └────────────┬─────────────┘
-```
-
-1. **Probabilistic Negative Binomial Loss ($\mu, \alpha$)**:
-   - Models intermittent, zero-inflated count data using dual softplus output heads ($\mu > 0, \alpha > 0$).
-   - Minimizes continuous Negative Binomial negative log-likelihood ($\mathcal{L}_{\text{NLL}}$).
-2. **Reversible Instance Normalization ($\text{RevIN}$) & Scale Normalization**:
-   - `RevIN` eliminates temporal distribution shifts between historical input windows ($L=35$) and forecasting horizons ($T=28$).
-   - Optional `MeanScaling` normalizes time-series magnitude using historical average demand.
-3. **Fast 12-Level Hierarchy Aggregation ($S$-Matrix)**:
-   - Constructs a sparse CSR aggregation matrix $S \in \mathbb{R}^{42840 \times 30490}$ linking bottom-level items to all 12 hierarchy levels (Total, State, Store, Category, Department, and cross-interactions).
-4. **Exogenous Feature & Metadata Mixing**:
-   - **Past & Future Exogenous Features**: Combines calendar indicators (`wday`, `day`, `dayofyear`), holiday event codes (Cultural, National, Religious, Sporting), SNAP benefits (`snap_CA`, `snap_TX`, `snap_WI`), and dual price z-score normalization (item-level and department-level).
-   - **Static Metadata Embeddings**: Categorical embedding layers for `state_id`, `store_id`, `cat_id`, `dept_id`, and `item_id` combined with continuous historical sales averages.
+- **It predicts a range, not just a number.** Sales counts are modeled with a Negative Binomial distribution, which is built for exactly this kind of sparse, spiky count data. Instead of a single prediction, the model outputs a full distribution, so you get a low estimate, a likely estimate, and a high estimate for each day.
+- **The hierarchy stays consistent.** Aggregating 42,840 series to check that store-level and category-level totals line up would be slow if done naively. This uses sparse matrix multiplication on the GPU to keep that aggregation under 100 milliseconds.
+- **Validation reflects how the model will actually be used.** Forecasts are tested against multiple historical cutoff points, with scalers and preprocessing fit only on data that would have been available at the time. That rules out the model accidentally learning from the future.
+- **What gets trained is what gets served.** Preprocessing steps, category lookups, and price normalization are packaged into a self-contained bundle so the live API applies the exact same transformations as training, to within a tiny numerical tolerance.
+- **It's a real service, not just a notebook.** A FastAPI app serves forecasts in real time, and the whole thing runs in a slim Docker container.
+- **Hyperparameters are tuned automatically** using Optuna, and every experiment is logged to Weights & Biases so runs are comparable and reproducible.
 
 ---
 
-##  Mathematical Formulations
+## Mathematical formulations
 
-### 1. Reversible Instance Normalization ($\text{RevIN}$)
-To prevent distribution shift across sliding historical windows:
+<details>
+<summary><b>Click to expand: metric derivations and model math</b></summary>
+
+<br>
+
+### 1. Reversible Instance Normalization (RevIN)
+
+To keep the model stable across sliding historical windows with different scales:
 
 $$\hat{x} = \gamma \odot \left( \frac{x - \mu_x}{\sigma_x + \epsilon} \right) + \beta$$
 
-where $\mu_x, \sigma_x$ are the mean and standard deviation along the temporal dimension $L$, and $\gamma, \beta$ are learnable affine parameters.
+where $\mu_x, \sigma_x$ are the mean and standard deviation over the lookback window, and $\gamma, \beta$ are learnable parameters.
 
-### 2. Probabilistic Negative Binomial Loss
-For overdispersed count data $y \sim \text{NB}(\mu, \alpha)$ parameterized by mean $\mu$ and dispersion parameter $\alpha$:
+### 2. Negative Binomial likelihood
 
-$$r = \frac{1}{\alpha}, \quad p = \frac{1}{1 + \alpha \mu}$$
+For overdispersed count data $y \sim \text{NB}(\mu, \alpha)$ with mean $\mu$ and dispersion $\alpha$:
+
+$$r = \frac{1}{\alpha}, \quad p = \frac{1}{1 + \alpha \mu}, \quad \text{Var}(Y) = \mu + \alpha \mu^2$$
 
 $$\mathcal{L}_{\text{NLL}} = -\left[ \log \Gamma(y + r) - \log \Gamma(y + 1) - \log \Gamma(r) + r \log(p + \epsilon) + y \log(1 - p + \epsilon) \right]$$
 
-### 3. Weighted Root Mean Squared Scaled Error (WRMSSE)
-The official M5 metric across all $K = 42,840$ hierarchy nodes:
+### 3. Discrete quantiles and CRPS
+
+Quantiles come from the discrete Negative Binomial percent point function:
+
+$$q_\tau = \min \{ k \in \mathbb{N}_0 : F_{\text{NB}}(k; \mu, \alpha) \ge \tau \}$$
+
+and the exact discrete Continuous Ranked Probability Score is:
+
+$$\text{CRPS}(F, y) = \sum_{k=0}^{\infty} \left( F_{\text{NB}}(k; \mu, \alpha) - \mathbb{I}(y \le k) \right)^2$$
+
+### 4. Pinball loss and Weighted Interval Score (WIS)
+
+For quantile level $\tau \in (0, 1)$:
+
+$$\mathcal{L}_{\tau}(y, \hat{y}_\tau) = \max \left( \tau (y - \hat{y}_\tau), (\tau - 1)(y - \hat{y}_\tau) \right)$$
+
+For a central $(1 - \alpha)$ prediction interval $[L, U]$:
+
+$$\text{IS}_\alpha(y, L, U) = (U - L) + \frac{2}{\alpha}(L - y)\mathbb{I}(y < L) + \frac{2}{\alpha}(y - U)\mathbb{I}(y > U)$$
+
+### 5. Weighted Root Mean Squared Scaled Error (WRMSSE)
+
+The official M5 evaluation metric, computed across all $K = 42{,}840$ hierarchy nodes:
 
 $$\text{WRMSSE} = \sum_{i=1}^{K} w_i \sqrt{ \frac{\frac{1}{h} \sum_{t=n+1}^{n+h} (\hat{y}_{i,t} - y_{i,t})^2}{c_i} }$$
 
-where $c_i$ is the scale factor computed from active training sales:
+where $c_i$ is a scale factor from historical sales:
 
 $$c_i = \frac{1}{n_i - 1} \sum_{t=2}^{n_i} (y_{i,t} - y_{i,t-1})^2$$
 
-and $w_i$ represents the dollar-revenue weight assigned to node $i$ across all 12 hierarchy levels.
+and $w_i$ is the dollar-revenue weight assigned to node $i$.
+
+</details>
 
 ---
 
-##  Project Structure
+## Project structure
 
 ```
 TSMixer-Ext-HTS/
-├── tsmixer_m5/
-│   ├── __init__.py
-│   ├── data.py
-│   ├── modeling.py
-│   ├── wrmsse.py
-│   ├── metrics.py
-│   ├── hparam_search.py
-│   ├── training.py
-│   ├── utils.py
-│   └── api/
-│       ├── app.py
-│       ├── config.py
-│       ├── runner.py
-│       ├── store.py
-│       ├── dependencies.py
-│       ├── schemas/
-│       │   ├── request.py
-│       │   └── response.py
-│       └── v1/
-│           ├── forecast.py
-│           └── health.py
+├── hier_forecast/
+│   ├── models/                  # Architectures, layers, and distributions
+│   │   ├── distribution.py      # NegativeBinomial wrapper, exact PPF quantiles, PIT
+│   │   ├── loss.py              # NegativeBinomialLoss
+│   │   ├── layers.py            # TimeMixing, FeatureMixing, StaticEmbeddingBlock, MeanScaling, RevIN
+│   │   ├── tsmixer.py           # Base mixer architecture
+│   │   ├── tsmixer_ext.py       # Extended architecture with static/exogenous conditioning
+│   │   └── __init__.py
+│   ├── data_processing/         # Preprocessing, feature engineering, PyTorch dataset
+│   │   ├── constants.py         # Categorical and event definitions
+│   │   ├── features.py          # Calendar, price z-scores, hierarchy S-matrix, weights
+│   │   ├── dataset.py           # M5Dataset (sliding-window & stochastic sampling)
+│   │   ├── bundle.py            # Artifact bundle serialization (bundle.npz, JSON lookups)
+│   │   ├── pipeline.py          # preprocess_m5 end-to-end pipeline
+│   │   └── __init__.py
+│   ├── evaluation/              # Hierarchical, probabilistic, and calibration metrics
+│   │   ├── hierarchical.py      # evaluate_wrmsse, evaluate_multi_window_wrmsse
+│   │   ├── probabilistic.py     # pinball_loss, WIS, empirical_coverage, sharpness, discrete CRPS
+│   │   ├── calibration.py       # PIT uniformity and histogram test
+│   │   └── __init__.py
+│   ├── training_engine/         # Multi-seed training, config runner, experiment tracking
+│   │   ├── utils.py             # seed_worker, git commit helper
+│   │   ├── trainer.py           # train_and_validate with W&B logging & checkpoints
+│   │   ├── experiment.py        # Config-driven experiment execution & manifest packaging
+│   │   └── __init__.py
+│   ├── api/                     # FastAPI inference microservice
+│   │   ├── app.py               # Application factory and lifespan
+│   │   ├── config.py            # AppConfig and environment settings
+│   │   ├── runner.py            # ModelRunner for batched inference
+│   │   ├── store.py             # InferenceStore for dynamic exogenous feature injection
+│   │   ├── dependencies.py      # Dependency injection
+│   │   ├── schemas/             # Pydantic request and response models
+│   │   └── v1/                  # API v1 routes (forecast, health)
+│   ├── config.py                # DataConfig, ModelConfig, TrainConfig, ExperimentConfig
+│   └── hparam_search.py         # Optuna hyperparameter study
 ├── data/
-│   ├── m5/
-│   └── m5_sample/
-├── Dockerfile
-├── healthcheck.py
-├── pyproject.toml
-├── uv.lock
+│   ├── m5/                      # Full M5 CSV files
+│   └── m5_sample/               # Sample M5 subset for unit tests and local API testing
+├── tests/                       # pytest suite (17 tests, 100% pass rate)
+├── Dockerfile                   # Multi-stage slim container definition
+├── pyproject.toml               # Project metadata, dependencies, and tooling config
 └── README.md
 ```
 
 ---
 
-##  Getting Started & Setup
+## Getting started
 
-### 1. Prerequisites & Installation
+### 1. Installation
 
-Clone the repository and set up the environment with `uv` (recommended) or `pip`:
+Set up the Python 3.13 environment with `uv` (recommended) or `pip`:
 
 ```bash
 git clone https://github.com/Chrisolande/TSMixer-Ext-HTS.git
 cd TSMixer-Ext-HTS
 
-# Create and activate virtual environment
+# Create and activate a virtual environment
 uv venv .venv
 source .venv/bin/activate
 
-# Install all dependencies (includes FastAPI, uvicorn, scalar-fastapi)
-pip install -e ".[dev]"
+# Install dependencies and dev tools
+uv pip install -e ".[dev]"
 ```
 
-### 2. Dataset Layout
-Place the official M5 dataset CSV files in `./data/m5/`:
+### 2. Dataset setup
+
+Place the official M5 dataset CSV files in `./data/m5/` (or use the sample in `./data/m5_sample/` for testing):
 
 ```
 data/
@@ -173,18 +169,17 @@ data/
 │   ├── sell_prices.csv
 │   └── sales_train_evaluation.csv    # or sales_train_validation.csv
 └── m5_sample/
-    └── sales_train_evaluation.csv    # 5-item subset - used by API default data
+    ├── calendar.csv
+    ├── sell_prices.csv
+    └── sales_train_evaluation.csv
 ```
 
-> The `data/m5_sample/` subset is used automatically by the inference API when `past_sales` is omitted from a request. It contains real M5 evaluation rows for `HOBBIES_1_000` through `HOBBIES_1_004` at store `CA_1`.
-
-### 3. Environment Variables
-Set your Weights & Biases API key for automated experiment logging and model artifact download:
+### 3. Environment variables
 
 ```bash
 export WANDB_API_KEY="your_wandb_api_key_here"
 
-# Optional overrides (defaults shown)
+# Optional, defaults shown
 export WANDB_MODEL_ARTIFACT="olandechris-/tsmixer-m5/tsmixer_m5_seed_43:v0"
 export MODEL_ARTIFACT_LOCAL_DIR="./artifact"
 export DATA_SNAPSHOT_DIR="./data/m5_sample"
@@ -193,134 +188,137 @@ export DEVICE="cpu"
 
 ---
 
-##  Usage & Workflows
+## Workflows & usage
 
-### 1. Parallel Hyperparameter Optimization (Optuna HPO)
+### 1. Preprocessing & artifact bundle export
 
-Run multi-GPU Optuna HPO study with TPE Sampler and MedianPruner:
-
-```bash
-python -m tsmixer_m5.hparam_search
-```
-
-Or invoke programmatically:
+Fit scalers, category maps, and price lookups on training data, then export them alongside the hierarchy matrices into a self-contained bundle:
 
 ```python
-from tsmixer_m5.hparam_search import run_optuna_study
+from hier_forecast.data_processing.bundle import save_preprocess_bundle
+from hier_forecast.data_processing.pipeline import preprocess_m5
 
-best_params = run_optuna_study(
-    n_trials=100,
-    data_dir="./data/m5",
-    storage_url="sqlite:///m5_optuna.db"
-)
-print("Optimal Hyperparameters:", best_params)
+# Fit and export preprocessing bundle
+data_dict = preprocess_m5("data/m5_sample", train_days=150)
+save_preprocess_bundle("artifact/", data_dict)
 ```
 
-### 2. Final 3-Seed Model Training & Evaluation
+### 2. Multi-window rolling-origin validation
 
-Train the final `TSMixerExt` model across 3 seeds (`42, 43, 44`) using optimal hyperparameters:
-
-```bash
-python -m tsmixer_m5.training
-```
-
-Or run via Python API:
+Evaluate WRMSSE, discrete CRPS, and empirical coverage across multiple forecast origins (e.g. days 70, 100, 130):
 
 ```python
-from tsmixer_m5.training import train_and_validate
+from hier_forecast.data_processing.pipeline import preprocess_m5
+from hier_forecast.evaluation.hierarchical import evaluate_multi_window_wrmsse
+from hier_forecast.models.tsmixer_ext import TSMixerExt
 
-mean_score, std_score = train_and_validate(
-    seeds=(42, 43, 44),
-    lr=0.0005066,
-    hidden_size=128,
-    num_blocks=8,
-    dropout=0.1,
-    batch_size=1024,
-    num_batches_per_epoch=200,
-    wandb_project="tsmixer-m5"
+data_dict = preprocess_m5("data/m5_sample", train_days=150)
+model = TSMixerExt(
+    seq_len=35,
+    pred_len=28,
+    num_features=1,
+    hist_exog_dim=10,
+    futr_exog_dim=10,
+    static_cont_dim=1,
+    cat_cardinalities=data_dict["cat_cardinalities"],
+    num_blocks=2,
+    hidden_size=32,
+    probabilistic=True,
 )
-print(f"Final Evaluation WRMSSE: {mean_score:.4f} ± {std_score:.4f}")
+
+metrics = evaluate_multi_window_wrmsse(data_dict, model, origins=[70, 100, 130])
+print(metrics)
 ```
 
-### 3. FastAPI Inference Service
+### 3. Config-driven experiment execution
 
-#### Local Development Server
+```python
+from hier_forecast.config import DataConfig, ExperimentConfig, ModelConfig, TrainConfig
+from hier_forecast.training_engine.experiment import run_experiment
 
-```bash
-uvicorn tsmixer_m5.api.app:app --host 0.0.0.0 --port 8000 --reload
+cfg = ExperimentConfig(
+    experiment_id="exp_tsmixer_nb_prod",
+    data=DataConfig(lookback=35, horizon=28, train_end_day=150),
+    model=ModelConfig(hidden_size=128, num_blocks=8, probabilistic=True),
+    train=TrainConfig(batch_size=1024, learning_rate=5e-4, seeds=[42, 43, 44]),
+)
+
+manifest = run_experiment(config=cfg, output_dir="artifacts/exp_tsmixer_nb_prod")
+print("Experiment Manifest:", manifest)
 ```
 
-On startup the service will:
-1. Attempt to download the best checkpoint from W&B Model Registry (requires `WANDB_API_KEY`).
-2. Fall back to `./artifact/best_wrmsse_seed_42.pth` or `./best_wrmsse_seed_42.pth` if W&B is unavailable.
-3. Infer `hidden_size`, `cat_cardinalities`, and `cat_emb_dims` directly from the checkpoint state-dict.
-4. Load the M5 sample snapshot from `./data/m5_sample/` for history-free requests.
+### 4. Hyperparameter optimization
 
-#### Docker Container Deployment
-
-Build and run the multi-stage slim container image:
+Automated TPE sampling with median pruning, via Optuna:
 
 ```bash
-# Build image with uv
-docker build -t tsmixer-ext-hts:latest .
-
-# Run containerized service
-docker run -d \
-  -p 8000:8000 \
-  -e WANDB_API_KEY="your_wandb_api_key_here" \
-  --name tsmixer-ext-hts \
-  tsmixer-ext-hts:latest
+python -m hier_forecast.hparam_search
 ```
 
-#### API Endpoints
+---
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/healthz` | Liveness probe - returns `{"status":"healthy"}` |
-| `GET` | `/readyz` | Readiness probe - confirms model is loaded |
-| `POST` | `/v1/forecast` | Batch 28-day probabilistic forecast |
-| `GET` | `/scalar` | Modern Scalar interactive API docs |
-| `GET` | `/docs` | Classic Swagger UI |
+## FastAPI inference service
 
-#### Forecast via curl
+### Running the API server
 
 ```bash
-# Single item - uses on-disk snapshot automatically (no past_sales needed)
+uvicorn hier_forecast.api.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Interactive docs:
+- **Scalar Docs**: `http://localhost:8000/scalar`
+- **Swagger UI**: `http://localhost:8000/docs`
+
+### Health & readiness probes
+
+```bash
+curl -s http://localhost:8000/health
+# {"status": "healthy"}
+
+curl -s http://localhost:8000/readyz
+# {"status": "ready", "device": "cpu"}
+```
+
+### 1. Automatic on-disk snapshot lookup (recommended)
+
+Forecast 28 days forward for given store and item IDs without providing past history manually (the service extracts the historical sales window and dynamic covariates automatically):
+
+```bash
 curl -s -X POST http://localhost:8000/v1/forecast \
   -H "Content-Type: application/json" \
   -d '{
-    "as_of_date": "2016-04-25",
-    "items": [{"store_id": "CA_1", "item_id": "HOBBIES_1_001"}],
-    "return_quantiles": true
-  }' | python -m json.tool
-
-# Batch of multiple items
-curl -s -X POST http://localhost:8000/v1/forecast \
-  -H "Content-Type: application/json" \
-  -d '{
-    "as_of_date": "2016-04-25",
+    "as_of_date": "2011-04-01",
     "items": [
-      {"store_id": "CA_1", "item_id": "HOBBIES_1_001"},
-      {"store_id": "CA_1", "item_id": "HOBBIES_1_002"}
+      {
+        "store_id": "CA_1",
+        "item_id": "HOBBIES_1_000_CA_1"
+      }
     ],
     "return_quantiles": true
   }' | python -m json.tool
+```
 
-# Manual 35-day sales override
+### 2. Manual 35-day `past_sales` override
+
+Supply a custom 35-day historical sales array directly:
+
+```bash
 curl -s -X POST http://localhost:8000/v1/forecast \
   -H "Content-Type: application/json" \
   -d '{
-    "as_of_date": "2016-04-25",
-    "items": [{
-      "store_id": "CA_1",
-      "item_id": "HOBBIES_1_001",
-      "past_sales": [0,1,2,2,0,1,0,1,0,2,0,0,1,2,0,3,3,5,1,2,0,1,0,1,1,2,2,3,2,0,2,1,2,4,2]
-    }],
+    "as_of_date": "2011-04-01",
+    "items": [
+      {
+        "store_id": "CA_1",
+        "item_id": "HOBBIES_1_000_CA_1",
+        "past_sales": [0,1,2,2,0,1,0,1,0,2,0,0,1,2,0,3,3,5,1,2,0,1,0,1,1,2,2,3,2,0,2,1,2,4,2]
+      }
+    ],
     "return_quantiles": true
   }' | python -m json.tool
 ```
 
-#### Example Response
+### Example response
 
 ```json
 {
@@ -331,12 +329,14 @@ curl -s -X POST http://localhost:8000/v1/forecast \
       "store_id": "CA_1",
       "item_id": "HOBBIES_1_001",
       "status": "success",
-      "mean": [1.107, 1.352, 1.297, ...],
-      "dispersion": [0.754, 0.793, 0.590, ...],
+      "mean": [0.965, 1.978, 1.172, 1.472, 1.669, 0.905, 1.102, 2.016, 1.172, 1.894, ...],
+      "median": [1, 1, 1, 1, 1, 0, 1, 2, 1, 1, ...],
+      "dispersion": [0.558, 0.484, 0.396, 0.383, 0.586, 0.891, 0.672, 0.342, ...],
       "quantiles": {
-        "p10": [0.0, 0.0, ...],
-        "p50": [1.107, 1.352, ...],
-        "p90": [2.933, 3.498, ...]
+        "p10": [0, 0, 0, 0, 0, 0, 0, 0, ...],
+        "p50": [1, 1, 1, 1, 1, 0, 1, 2, ...],
+        "p90": [3, 5, 3, 3, 4, 3, 3, 4, ...],
+        "median": null
       },
       "error_detail": null
     }
@@ -344,61 +344,36 @@ curl -s -X POST http://localhost:8000/v1/forecast \
 }
 ```
 
-> **Note on p10 zeros**: For low-demand items (~1-2 units/day), `P(sales=0)` can exceed 10%, making the 10th percentile mathematically zero. This is correct Negative Binomial behaviour, not a bug.
+---
 
-#### Running Tests
+## Testing & quality assurance
 
 ```bash
-# Full test suite (unit + integration, no server needed)
-python -m pytest -v
+# Unit, parity, and integration tests
+uv run pytest tests/ -v
 
-# API integration tests only
-python -m pytest tests/test_fastapi_forecast_route.py -v
-
-# Store encoding unit tests only
-python -m pytest tests/test_api_store.py -v
+# Lint checks
+uv run ruff check hier_forecast tests
 ```
-
-#### Service Architecture
-
-```
-Request (POST /v1/forecast)
-        │
-        ▼
-  FastAPI Router
-        │
-        ▼
-  asyncio.to_thread()          ← keeps event loop unblocked
-        │
-        ▼
-  InferenceStore               ← encodes store/item → integer indices
-  .build_tensors()             ← assembles 35-day history from snapshot CSV
-        │
-        ▼
-  ModelRunner.predict()        ← batched forward pass with AMP (bfloat16 on CPU)
-        │
-        ▼
-  Negative Binomial quantiles  ← scipy.stats NB ppf for p10/p50/p90
-        │
-        ▼
-  ForecastResponse (JSON)
-```
-
-**Observability headers** are automatically injected on every response:
-- `X-Request-ID` - UUID trace identifier (pass your own via request header)
-- `X-Response-Time-MS` - wall-clock latency in milliseconds
 
 ---
 
-##  Weights & Biases Integration
+## Docker deployment
 
-- **Live Interactive W&B Report**: Explore training curves, Optuna parameter importance, and evaluation dashboards on [Weights & Biases Reports](https://wandb.ai/olandechris-/tsmixer-m5/reports/TSMixer-M5-Test-WRMSSE-Optimization-Report--VmlldzoxNzY5MzQ3NA).
-- **Automated Metric Tracking**: Real-time logging of train NLL, validation NLL, learning rate schedules, and step-based WRMSSE.
-- **Model Registry & Artifacts**: Best performing checkpoints (`best_wrmsse_seed_{seed}.pth`) are automatically uploaded to W&B Model Catalog using `run.log_model()`.
-- **API Auto-Download**: The FastAPI service pulls the registered artifact at startup via `wandb.Api().artifact(...)` - no manual checkpoint management required.
+```bash
+# Build multi-stage slim image
+docker build -t tsmixer-ext-hts:latest .
+
+# Run container
+docker run -d \
+  -p 8000:8000 \
+  -e WANDB_API_KEY="your_wandb_api_key_here" \
+  --name tsmixer-ext-hts \
+  tsmixer-ext-hts:latest
+```
 
 ---
 
-##  License
+## License
 
 Distributed under the MIT License. See `LICENSE` for details.

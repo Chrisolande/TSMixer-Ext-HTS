@@ -3,10 +3,10 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["tsmixer_m5*"]
+include = ["hier_forecast*"]
 
 [project]
-name = "subhierts"
+name = "tsmixer-ext-hts"
 version = "0.1.0"
 requires-python = ">=3.13"
 
@@ -14,9 +14,12 @@ dependencies = [
     "fastapi>=0.110.0",
     "ipykernel>=7.3.0",
     "loguru>=0.7.3",
+    "matplotlib>=3.11.1",
     "numpy>=1.26.0",
     "pandas>=3.0.5",
+    "plotnine>=0.15.7",
     "pydantic-settings>=2.0.0",
+    "pytorch-lightning>=2.6.5",
     "scalar-fastapi>=1.0.0",
     "scikit-learn>=1.9.0",
     "scipy>=1.13.0",
@@ -44,6 +47,11 @@ dev = [
     "pytest>=8.0.0",
     "ruff>=0.3.0",
     "torchview>=0.2.7",
+]
+
+[dependency-groups]
+dev = [
+    "jupyter-cache>=1.0.1",
 ]
 
 [tool.ruff]

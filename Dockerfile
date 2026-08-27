@@ -12,7 +12,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-editable --no-install-project
 
-COPY tsmixer_m5 ./tsmixer_m5
+COPY hier_forecast ./hier_forecast
 RUN uv sync --frozen --no-dev --no-editable
 
 RUN find /app/.venv -type d -name "__pycache__" -prune -exec rm -rf {} + 2>/dev/null || true && \
@@ -41,7 +41,7 @@ RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin appuser
 COPY --from=builder /app/.venv /app/.venv
 COPY healthcheck.py /app/healthcheck.py
 
-COPY tsmixer_m5 /app/tsmixer_m5
+COPY hier_forecast /app/hier_forecast
 COPY best_wrmsse_seed_42.pth /app/artifact/best_wrmsse_seed_42.pth
 COPY data/m5_sample /app/data/m5_sample
 
@@ -52,4 +52,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD ["python", "/app/healthcheck.py"]
 
 ENTRYPOINT ["python", "-m", "uvicorn"]
-CMD ["tsmixer_m5.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["hier_forecast.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
